@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -40,14 +41,25 @@ func (p *Provider) Init(providerName string, appCfg *config.Config, logger log.L
 	p.appCfg = appCfg
 	p.logger = logger
 
-	if strings.ToLower(p.appCfg.StringDefault("cache."+p.name+".provider", "")) != "redis" {
+	cfgPrefix := "cache." + p.name + "."
+	if strings.ToLower(p.appCfg.StringDefault(cfgPrefix+"provider", "")) != "redis" {
 		return fmt.Errorf("aah/cache: not a vaild provider name, expected 'redis'")
 	}
 
 	p.clientOpts = &redis.Options{
-		Addr:     p.appCfg.StringDefault("cache."+p.name+".address", ":6379"),
-		Password: p.appCfg.StringDefault("cache."+p.name+".password", ""),
-		DB:       p.appCfg.IntDefault("cache."+p.name+".db", 0),
+		Network:            p.appCfg.StringDefault(cfgPrefix+"network", "tcp"),
+		Addr:               p.appCfg.StringDefault(cfgPrefix+"address", ":6379"),
+		Password:           p.appCfg.StringDefault(cfgPrefix+"password", ""),
+		DB:                 p.appCfg.IntDefault(cfgPrefix+"db", 0),
+		PoolSize:           p.appCfg.IntDefault(cfgPrefix+"pool_size", 10*runtime.NumCPU()),
+		DialTimeout:        parseDuration(p.appCfg.StringDefault(cfgPrefix+"timeout.connect", "5s"), "5s"),
+		ReadTimeout:        parseDuration(p.appCfg.StringDefault(cfgPrefix+"timeout.read", "3s"), "3s"),
+		WriteTimeout:       parseDuration(p.appCfg.StringDefault(cfgPrefix+"timeout.write", "3s"), "3s"),
+		PoolTimeout:        parseDuration(p.appCfg.StringDefault(cfgPrefix+"timeout.pool", "3s"), "3s"),
+		IdleTimeout:        parseDuration(p.appCfg.StringDefault(cfgPrefix+"timeout.idle", "5m"), "5m"),
+		IdleCheckFrequency: parseDuration(p.appCfg.StringDefault(cfgPrefix+"idle_check_interval", "1m"), "1m"),
+		MinRetryBackoff:    parseDuration(p.appCfg.StringDefault(cfgPrefix+"retry_backoff.min", "8ms"), "8ms"),
+		MaxRetryBackoff:    parseDuration(p.appCfg.StringDefault(cfgPrefix+"retry_backoff.max", "512ms"), "512ms"),
 	}
 
 	p.client = redis.NewClient(p.clientOpts)
@@ -69,6 +81,12 @@ func (p *Provider) Create(cfg *cache.Config) (cache.Cache, error) {
 		p:         p,
 	}
 	return r, nil
+}
+
+// Client method returns underlying redis client. So that aah user could perform
+// cache provider specific features.
+func (p *Provider) Client() *redis.Client {
+	return p.client
 }
 
 //‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
@@ -170,4 +188,12 @@ func releaseBuffer(b *bytes.Buffer) {
 		b.Reset()
 		bufPool.Put(b)
 	}
+}
+
+func parseDuration(v, f string) time.Duration {
+	if d, err := time.ParseDuration(v); err == nil {
+		return d
+	}
+	d, _ := time.ParseDuration(f)
+	return d
 }

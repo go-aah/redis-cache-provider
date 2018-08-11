@@ -148,6 +148,9 @@ func TestRedisMultipleCache(t *testing.T) {
 			assert.Equal(t, i, v)
 		}
 		c.Flush()
+
+		p := mgr.Provider("redis1").(*Provider)
+		assert.NotNil(t, p.Client())
 	}
 }
 
@@ -201,6 +204,11 @@ func TestRedisInvalidAddress(t *testing.T) {
 	l, _ := log.New(config.NewEmpty())
 	err := mgr.InitProviders(cfg, l)
 	assert.Equal(t, errors.New("aah/cache: dial tcp: address 637967: invalid port"), err)
+}
+
+func TestParseTimeDuration(t *testing.T) {
+	d := parseDuration("", "1m")
+	assert.Equal(t, float64(1), d.Minutes())
 }
 
 func createCacheMgr(t *testing.T, name, appCfgStr string) *cache.Manager {
