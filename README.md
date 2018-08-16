@@ -3,7 +3,7 @@
   <h2 align="center">Redis Cache Provider by aah framework</h2>
 </p>
 
-Currently single node mode is support. Redis cluster support upcoming!
+Currently single node mode is support. Redis cluster support upcoming! aah cache library uses [github.com/go-redis/redis](https://godoc.org/github.com/go-redis/redis) library internally. 
 
 ### News
 
