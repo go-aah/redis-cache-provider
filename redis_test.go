@@ -74,7 +74,8 @@ func TestRedisCache(t *testing.T) {
 	}
 
 	err := c.Put("pre-test-key1", sample{Name: "Jeeva", Present: true, Value: "redis cache provider"}, 3*time.Second)
-	assert.Equal(t, errors.New("aah/cache: gob: type not registered for interface: redis.sample"), err)
+	assert.Equal(t, errors.New("aah/cache/cache1: gob: type not registered for interface: redis.sample"), err)
+	_, _ = c.GetOrPut("pre-test-key1", sample{Name: "Jeeva", Present: true, Value: "redis cache provider"}, 3*time.Second)
 
 	gob.Register(map[string]interface{}{})
 	gob.Register(sample{})
@@ -89,9 +90,11 @@ func TestRedisCache(t *testing.T) {
 
 			v := c.Get(tc.key)
 			assert.Equal(t, tc.value, v)
+			assert.True(t, c.Exists(tc.key))
 
 			c.Delete(tc.key)
-			v = c.GetOrPut(tc.key, tc.value, 3*time.Second)
+			v, err = c.GetOrPut(tc.key, tc.value, 3*time.Second)
+			assert.Nil(t, err)
 			assert.Equal(t, tc.value, v)
 		})
 	}
@@ -169,7 +172,8 @@ func TestRedisSlideEvictionMode(t *testing.T) {
 	}
 
 	for i := 5; i < 10; i++ {
-		v := c.GetOrPut(fmt.Sprintf("key_%v", i), i, 3*time.Second)
+		v, err := c.GetOrPut(fmt.Sprintf("key_%v", i), i, 3*time.Second)
+		assert.Nil(t, err)
 		assert.Equal(t, i, v)
 	}
 
@@ -203,7 +207,7 @@ func TestRedisInvalidAddress(t *testing.T) {
 	}`)
 	l, _ := log.New(config.NewEmpty())
 	err := mgr.InitProviders(cfg, l)
-	assert.Equal(t, errors.New("aah/cache: dial tcp: address 637967: invalid port"), err)
+	assert.Equal(t, errors.New("aah/cache/redis1: dial tcp: address 637967: invalid port"), err)
 }
 
 func TestParseTimeDuration(t *testing.T) {

@@ -64,11 +64,11 @@ func (p *Provider) Init(providerName string, appCfg *config.Config, logger log.L
 
 	p.client = redis.NewClient(p.clientOpts)
 	if _, err := p.client.Ping().Result(); err != nil {
-		return fmt.Errorf("aah/cache: %s", err)
+		return fmt.Errorf("aah/cache/%s: %s", p.name, err)
 	}
 
 	gob.Register(entry{})
-	p.logger.Infof("Cache provider: %s connected successfully with %s", p.name, p.clientOpts.Addr)
+	p.logger.Infof("aah/cache/provider: %s connected successfully with %s", p.name, p.clientOpts.Addr)
 
 	return nil
 }
@@ -111,16 +111,22 @@ func (r *redisCache) Get(k string) interface{} {
 	k = r.keyPrefix + k
 	v, err := r.p.client.Get(k).Bytes()
 	if err != nil {
+		if notacacheMiss(err) != nil {
+			r.p.logger.Errorf("aah/cache/%s: key(%s) %v", r.Name(), k[len(r.keyPrefix):], err)
+		}
 		return nil
 	}
 
 	var e entry
 	err = gob.NewDecoder(bytes.NewBuffer(v)).Decode(&e)
 	if err != nil {
+		r.p.logger.Errorf("aah/cache/%s: %v", r.Name(), err)
 		return nil
 	}
 	if r.p.cfg.EvictionMode == cache.EvictionModeSlide {
-		_ = r.p.client.Expire(k, e.D)
+		if err = r.p.client.Expire(k, e.D).Err(); err != nil {
+			r.p.logger.Errorf("aah/cache/%s: key(%s) %v", r.Name(), k[len(r.keyPrefix):], err)
+		}
 	}
 
 	return e.V
@@ -128,13 +134,15 @@ func (r *redisCache) Get(k string) interface{} {
 
 // GetOrPut method returns the cached entry for the given key if it exists otherwise
 // it puts the new entry into cache store and returns the value.
-func (r *redisCache) GetOrPut(k string, v interface{}, d time.Duration) interface{} {
+func (r *redisCache) GetOrPut(k string, v interface{}, d time.Duration) (interface{}, error) {
 	ev := r.Get(k)
 	if ev == nil {
-		_ = r.Put(k, v, d)
-		return v
+		if err := r.Put(k, v, d); err != nil {
+			return nil, err
+		}
+		return v, nil
 	}
-	return ev
+	return ev, nil
 }
 
 // Put method adds the cache entry with specified expiration. Returns error
@@ -144,7 +152,7 @@ func (r *redisCache) Put(k string, v interface{}, d time.Duration) error {
 	buf := acquireBuffer()
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(e); err != nil {
-		return fmt.Errorf("aah/cache: %v", err)
+		return fmt.Errorf("aah/cache/%s: %v", r.Name(), err)
 	}
 
 	cmd := r.p.client.Set(r.keyPrefix+k, buf.Bytes(), d)
@@ -153,19 +161,29 @@ func (r *redisCache) Put(k string, v interface{}, d time.Duration) error {
 }
 
 // Delete method deletes the cache entry from cache store.
-func (r *redisCache) Delete(k string) {
-	r.p.client.Del(r.keyPrefix + k)
+func (r *redisCache) Delete(k string) error {
+	if err := r.p.client.Del(r.keyPrefix + k).Err(); notacacheMiss(err) != nil {
+		return fmt.Errorf("aah/cache/%s: key(%s) %v", r.Name(), k, err)
+	}
+	return nil
 }
 
 // Exists method checks given key exists in cache store and its not expried.
 func (r *redisCache) Exists(k string) bool {
 	result, err := r.p.client.Exists(r.keyPrefix + k).Result()
-	return err == nil && result == 1
+	if err != nil {
+		r.p.logger.Errorf("aah/cache/%s: key(%s) %v", r.Name(), k, err)
+		return false
+	}
+	return result == 1
 }
 
 // Flush methods flushes(deletes) all the cache entries from cache.
-func (r *redisCache) Flush() {
-	r.p.client.FlushDB()
+func (r *redisCache) Flush() error {
+	if err := r.p.client.FlushDB().Err(); err != nil {
+		return fmt.Errorf("aah/cache/%s: %v", r.Name(), err)
+	}
+	return nil
 }
 
 //‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
@@ -196,4 +214,11 @@ func parseDuration(v, f string) time.Duration {
 	}
 	d, _ := time.ParseDuration(f)
 	return d
+}
+
+func notacacheMiss(err error) error {
+	if err != nil && err.Error() == "redis: nil" {
+		return nil
+	}
+	return err
 }
