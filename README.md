@@ -12,7 +12,7 @@ Currently single node mode is support. Redis cluster support upcoming! aah cache
 ## Installation
 
 ```bash
-go get -u aahframework.org/cache/redis
+go get -u aahframework.org/cache/provider/redis
 ```
 
 Visit official website https://aahframework.org to learn more about `aah` framework.
