@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"aahframe.work/aah/cache"
-	"aahframe.work/aah/config"
-	"aahframe.work/aah/log"
+	"aahframe.work/cache"
+	"aahframe.work/config"
+	"aahframe.work/log"
 	"github.com/stretchr/testify/assert"
 )
 
