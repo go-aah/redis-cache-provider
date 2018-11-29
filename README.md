@@ -9,10 +9,23 @@ Currently single node mode is support. Redis cluster support upcoming! aah cache
 
   * `v0.1.0` [released](https://github.com/go-aah/redis-cache-provider/releases/latest) and tagged on TBD.
 
-## Installation
+## Usage
 
 ```bash
-go get -u aahframe.work/cache/provider/redis
+# go.mod
+require aahframe.work/cache/provider/redis v0.1.0
 ```
 
 Visit official website https://aahframework.org to learn more about `aah` framework.
+
+## Issues
+
+Please report issues at https://aahframework.org/issues.
+
+## Author
+
+[Jeevanandam M.](https://github.com/jeevatkm) (jeeva@myjeeva.com)
+
+## License
+
+`inmemory-cache-provider` released under MIT License.
